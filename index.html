@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Clean, descriptive title with dummy project name -->
+    <title>PeerLearn - Real-Time Learning Platform</title>
+    <!-- Link to our external CSS file -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header Section -->
+        <header class="app-header">
+            <div class="logo-container">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"
+                    class="logo-icon">
+                    <circle cx="16" cy="10" r="5" stroke="#3b82f6" stroke-width="3" />
+                    <circle cx="10" cy="22" r="4" stroke="#10b981" stroke-width="3" />
+                    <path d="M14 14L11 19" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" />
+                </svg>
+                <span class="logo-text">peerlix</span>
+            </div>
+            <nav class="main-nav">
+                <div class="nav-links" id="nav-links">
+                    <a href="#" id="nav-about">About</a>
+                    <a href="#" id="nav-howitworks">How it Works</a>
+                    <a href="#" id="nav-invitations" class="hidden" style="position:relative;">
+                        Invitations
+                        <span id="invitation-badge" class="badge hidden">0</span>
+                    </a>
+                </div>
+                <div id="auth-buttons">
+                    <button class="btn-secondary" id="nav-signin">Log In</button>
+                    <button class="btn-gradient" id="nav-signup">Sign Up</button>
+                    <img id="nav-profile-btn" class="nav-avatar hidden" src="" alt="Profile" title="Edit Profile">
+                </div>
+                <button id="theme-toggle" class="btn-icon" aria-label="Toggle Dark Mode">🌙</button>
+                <button id="mobile-menu-btn" class="btn-icon mobile-only" aria-label="Menu">☰</button>
+            </nav>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="main-content">
+            <!-- VIEW 1: Dashboard / Join Area -->
+            <!-- We use 'active' class to show this view initially -->
+            <section id="dashboard-view" class="view active">
+                <div class="landing-hero">
+                    <div class="hero-content">
+                        <h1>Learn. Teach. Grow.<br>Real-time Peer Skill Exchange.</h1>
+                        <p>Connect instantly with global peers to master new skills and share your expertise through
+                            collaborative live sessions.</p>
+                        <button class="btn-gradient hero-btn" id="hero-get-started">Get
+                            Started</button>
+                    </div>
+                    <div class="hero-visual">
+                        <div class="connection-lines"></div>
+                        <div class="floating-icon i-gear">⚙️</div>
+                        <div class="floating-icon i-pencil">✏️</div>
+                        <div class="floating-icon i-code">&lt;/&gt;</div>
+                        <div class="floating-avatar a1">📖</div>
+                        <div class="floating-avatar a2">👍</div>
+                        <div class="floating-avatar a3">🔥</div>
+                        <div class="floating-avatar a4">🎨</div>
+                    </div>
+                </div>
+
+                <!-- Network / Users Section -->
+                <div id="network-section" class="network-section hidden">
+                    <div class="network-header">
+                        <h2>Global Peer Network</h2>
+                        <div class="status-filters">
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="online">🟢 Online</button>
+                            <button class="filter-btn" data-filter="live">🟡 Live Session</button>
+                            <button class="filter-btn" data-filter="offline">⚪ Offline</button>
+                        </div>
+                    </div>
+
+                    <div class="users-grid" id="users-grid">
+                        <!-- User cards will be dynamically injected here by JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW 2: Chat Room Area -->
+            <!-- Hidden initially using 'hidden' class -->
+            <section id="chat-view" class="view hidden">
+                <div class="chat-container card">
+                    <div class="chat-header">
+                        <div class="chat-info">
+                            <h2 id="current-room-name">Room Name</h2>
+                            <span class="participants">Participants Online</span>
+                        </div>
+                        <button id="leave-room-btn" class="btn-secondary">Leave Room</button>
+                    </div>
+
+                    <!-- Area where chat messages appear -->
+                    <div class="chat-messages" id="chat-messages">
+                        <!-- Messages appended dynamically by JS -->
+                    </div>
+
+                    <!-- Fake typing indicator, hidden by default -->
+                    <div id="typing-indicator" class="typing-indicator hidden">
+                        <span>Someone is typing...</span>
+                    </div>
+
+                    <!-- Form for sending messages -->
+                    <form id="chat-form" class="chat-input-area">
+                        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+                        <button type="submit" class="btn-primary">Send</button>
+                    </form>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer Section -->
+        <footer>
+            <p>&copy; 2026 PeerLix Platform. Built for learners everywhere.</p>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+    <!-- Sign In Modal -->
+    <div id="signin-modal" class="modal hidden">
+        <div class="modal-content card">
+            <button class="close-modal" id="close-signin">&times;</button>
+            <h2 style="margin-bottom: 0.5rem">Log In</h2>
+            <p style="margin-bottom: 1.5rem; color: var(--system-text); font-size: 0.9rem;">Log in to your account</p>
+            <div id="signin-error" class="hidden" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 1rem; text-align: center; background: rgba(239,68,68,0.1); padding: 0.5rem; border-radius: 4px;">Please Enter the Correct Password</div>
+            <form id="signin-form">
+                <div class="input-group">
+                    <label for="userid">User ID / Email</label>
+                    <input type="text" id="userid" placeholder="Enter your email" required>
+                </div>
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password" required>
+                    <a href="#" id="forgot-password-link" style="display: inline-block; margin-top: 0.5rem; font-size: 0.85rem; color: var(--primary-color); text-decoration: none; cursor: pointer;">Forgot Password?</a>
+                </div>
+                <button type="submit" class="btn-primary" style="margin-top: 1rem; width: 100%;">Log In</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sign Up Modal -->
+    <div id="signup-modal" class="modal hidden">
+        <div class="modal-content card">
+            <button class="close-modal" id="close-signup">&times;</button>
+            <h2 style="margin-bottom: 0.5rem">Sign Up</h2>
+            <p style="margin-bottom: 1.5rem; color: var(--system-text); font-size: 0.9rem;">Create a new account</p>
+            <div id="signup-error" class="hidden"
+                style="color: #ef4444; font-size: 0.85rem; margin-bottom: 1rem; text-align: center; background: rgba(239,68,68,0.1); padding: 0.5rem; border-radius: 4px;">
+                Fill all the Required details</div>
+            <form id="signup-form">
+                <div class="input-group">
+                    <label for="signup-username">Username</label>
+                    <input type="text" id="signup-username" placeholder="Choose a Username">
+                </div>
+                <div class="input-group">
+                    <label for="signup-email">Email</label>
+                    <input type="email" id="signup-email" placeholder="Enter your Email">
+                </div>
+                <div class="input-group">
+                    <label for="signup-password">Set New Password</label>
+                    <input type="password" id="signup-password" placeholder="Create a password">
+                </div>
+                <div class="input-group">
+                    <label for="signup-confirm-password">Reconfirm Password</label>
+                    <input type="password" id="signup-confirm-password" placeholder="Confirm your password">
+                </div>
+                <button type="submit" class="btn-gradient" style="margin-top: 1rem; width: 100%;">Sign Up</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="about-modal" class="modal hidden">
+        <div class="modal-content card">
+            <button class="close-modal" id="close-about">&times;</button>
+            <h2 style="margin-bottom: 1rem;">About PeerLix</h2>
+            <p style="color: var(--system-text); margin-bottom: 1rem; line-height: 1.5;">PeerLix is a real-time
+                collaborative platform designed to help you master new skills by connecting instantly with global peers.
+            </p>
+            <p style="color: var(--system-text); line-height: 1.5;">Built for learners, by learners. No more waiting for
+                asynchronous help—get live interactive sessions when you need them most.</p>
+        </div>
+    </div>
+
+    <!-- How it Works Modal -->
+    <div id="howitworks-modal" class="modal hidden">
+        <div class="modal-content card" style="max-width: 75%; width: 75%; padding: 2.5rem;">
+            <button class="close-modal" id="close-howitworks" style="top: 1.5rem; right: 1.5rem;">&times;</button>
+            <h2 style="margin-bottom: 2rem; text-align: center; font-size: 2rem; color: var(--text-color);">How It Works
+            </h2>
+
+            <div
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; text-align: left;">
+                <div
+                    style="background: var(--bg-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔍</div>
+                    <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">1. Find Peers</h3>
+                    <p style="color: var(--system-text); font-size: 0.95rem; line-height: 1.6;">Browse the global peer
+                        network on your dashboard. Filter users by their active status (Online, Live, Offline) and view
+                        their primary expertise.</p>
+                </div>
+                <div
+                    style="background: var(--bg-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">🤝</div>
+                    <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">2. Connect & Match</h3>
+                    <p style="color: var(--system-text); font-size: 0.95rem; line-height: 1.6;">Click the info button on
+                        any peer card to see a detailed profile, including their extra skills and social links. Decide
+                        if they are the right match for your learning goals.</p>
+                </div>
+                <div
+                    style="background: var(--bg-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">💬</div>
+                    <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">3. Learn Live</h3>
+                    <p style="color: var(--system-text); font-size: 0.95rem; line-height: 1.6;">Hit "Connect" to
+                        instantly jump into a secure, real-time chat room where you can collaborate, ask questions, and
+                        grow your skills together.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Profile Editor Modal -->
+    <div id="editor-modal" class="modal hidden">
+        <div class="modal-content card" style="max-width: 500px; width: 95%;">
+            <button class="close-modal" id="close-editor">&times;</button>
+            <h2 style="margin-bottom: 0.5rem">Edit Profile</h2>
+            <p style="margin-bottom: 1.5rem; color: var(--system-text); font-size: 0.9rem;">Customize how you appear to
+                others</p>
+            <form id="editor-form">
+                <div class="editor-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label for="edit-username">Display Name</label>
+                        <input type="text" id="edit-username" required>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label for="edit-skill">Primary Skill</label>
+                        <select id="edit-skill" required
+                            style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-color); font-family: inherit; font-size: 1rem;">
+                            <option value="">Select a skill...</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="grid-column: 1 / -1; margin-bottom: 0;">
+                        <label for="edit-extra-skills">Extra Skills</label>
+                        <select id="edit-extra-skills" multiple
+                            style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-color); font-family: inherit; font-size: 1rem; min-height: 120px;">
+                            <option value="JavaScript">JavaScript</option>
+                            <option value="Python">Python</option>
+                            <option value="React">React</option>
+                            <option value="Node.js">Node.js</option>
+                            <option value="UI/UX">UI/UX</option>
+                            <option value="Web Design">Web Design</option>
+                            <option value="TypeScript">TypeScript</option>
+                            <option value="Vue.js">Vue.js</option>
+                            <option value="Angular">Angular</option>
+                            <option value="Java">Java</option>
+                            <option value="C++">C++</option>
+                            <option value="C#">C#</option>
+                            <option value="PHP">PHP</option>
+                            <option value="Ruby">Ruby</option>
+                            <option value="Go">Go</option>
+                            <option value="Rust">Rust</option>
+                            <option value="SQL">SQL</option>
+                            <option value="MongoDB">MongoDB</option>
+                            <option value="AWS">AWS</option>
+                            <option value="Docker">Docker</option>
+                            <option value="Kubernetes">Kubernetes</option>
+                            <option value="DevOps">DevOps</option>
+                            <option value="Machine Learning">Machine Learning</option>
+                            <option value="Data Science">Data Science</option>
+                            <option value="AI">AI</option>
+                            <option value="Blockchain">Blockchain</option>
+                            <option value="Cybersecurity">Cybersecurity</option>
+                            <option value="Mobile Development">Mobile Development</option>
+                            <option value="iOS">iOS</option>
+                            <option value="Android">Android</option>
+                            <option value="Git">Git</option>
+                            <option value="Linux">Linux</option>
+                            <option value="Jenkins">Jenkins</option>
+                            <option value="API Design">API Design</option>
+                            <option value="GraphQL">GraphQL</option>
+                            <option value="REST API">REST API</option>
+                            <option value="Testing">Testing</option>
+                            <option value="Content Writing">Content Writing</option>
+                            <option value="Graphic Design">Graphic Design</option>
+                            <option value="Video Editing">Video Editing</option>
+                            <option value="Digital Marketing">Digital Marketing</option>
+                            <option value="SEO">SEO</option>
+                            <option value="Social Media">Social Media</option>
+                            <option value="Project Management">Project Management</option>
+                            <option value="Agile">Agile</option>
+                            <option value="Scrum">Scrum</option>
+                        </select>
+                        <p style="font-size: 0.8rem; color: var(--system-text); margin-top: 0.5rem;">Hold Ctrl/Cmd to
+                            select multiple skills</p>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label for="edit-github">GitHub Username</label>
+                        <input type="text" id="edit-github" placeholder="octocat">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label for="edit-linkedin">LinkedIn Profile URL</label>
+                        <input type="text" id="edit-linkedin" placeholder="https://linkedin.com/in/...">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                    <button type="button" class="btn-secondary" id="cancel-editor" style="flex: 1;">Cancel</button>
+                    <button type="submit" class="btn-primary" id="save-editor" style="flex: 2;">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Invitations Modal -->
+    <div id="invitations-modal" class="modal hidden">
+        <div class="modal-content card" style="max-width: 450px; width: 95%;">
+            <button class="close-modal" id="close-invitations" style="top: 1.5rem; right: 1.5rem;">&times;</button>
+            <h2 style="margin-bottom: 1.5rem;">Connection Requests</h2>
+            <div id="invitations-list" style="display: flex; flex-direction: column; gap: 1rem;">
+                <p style="text-align: center; color: var(--system-text); font-size: 0.95rem;">No pending invitations.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Profile Modal -->
+    <div id="profile-modal" class="modal hidden">
+        <div class="modal-content"
+            style="padding: 0; max-width: 320px; overflow: hidden; background: var(--card-bg); border-radius: 10px;">
+            <button class="close-modal" id="close-profile"
+                style="z-index: 20; color: white; background: rgba(0,0,0,0.5); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; top: 10px; right: 15px; font-size: 1.2rem; margin: 0; padding: 0;">&times;</button>
+            <div class="popover-banner" id="modal-banner"></div>
+            <div class="popover-content" style="padding: 0 1.5rem 1.5rem;">
+                <div class="popover-avatar-wrapper"
+                    style="margin: -45px auto 0; width: 90px; height: 90px; border-radius: 50%; padding: 6px; background: var(--card-bg);">
+                    <img id="modal-avatar" src=""
+                        style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" alt="Avatar">
+                </div>
+                <div class="popover-info" style="text-align: center; margin-top: 0.5rem;">
+                    <h2 class="popover-name" id="modal-name" style="font-size: 1.3rem; margin-bottom: 0.25rem;"></h2>
+                    <p class="popover-skill" id="modal-skill"
+                        style="color: var(--system-text); font-weight: 500; font-size: 0.9rem; margin-bottom: 0;"></p>
+                    <div id="modal-extra-skills"
+                        style="display: flex; gap: 0.4rem; justify-content: center; flex-wrap: wrap; margin-top: 0.75rem;">
+                    </div>
+                </div>
+                <div class="popover-socials"
+                    style="margin-top: 1.5rem; background: var(--secondary-color); padding: 1rem; border-radius: 8px;">
+                    <div style="display: flex; align-items: center; font-size: 0.9rem; margin-bottom: 0.75rem;">
+                        <strong>✉️</strong> <span id="modal-email" style="margin-left: 0.5rem"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; font-size: 0.9rem; margin-bottom: 0.75rem;">
+                        <strong>💻</strong> <span id="modal-github" style="margin-left: 0.5rem"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; font-size: 0.9rem;"><strong>🔗</strong> <span
+                            id="modal-linkedin" style="margin-left: 0.5rem"></span></div>
+                </div>
+                <button class="btn-primary w-100" style="margin-top: 1.5rem; width: 100%;" id="modal-msg-btn">Message
+                    Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Script Configuration (as ES Module) -->
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>
