@@ -5,15 +5,6 @@ import { getDatabase, ref, onValue, set, onDisconnect } from "https://www.gstati
 
 // --- 1. Firebase Configuration ---
 // ⚠️ REPLACE THIS CONFIGURATION WITH YOUR OWN FIREBASE PROJECT SETTINGS ⚠️
-const firebaseConfig = {
-    apiKey: "AIzaSyB7PCzX5p2KqQqleQDrf9u1Mrfur9JICAg",
-    authDomain: "somanji-b1d6a.firebaseapp.com",
-    projectId: "somanji-b1d6a",
-    storageBucket: "somanji-b1d6a.firebasestorage.app",
-    messagingSenderId: "589715097101",
-    appId: "1:589715097101:web:c6a56c848d8b93feff3744",
-    measurementId: "G-0DKPDQHGHF"
-};
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
