@@ -260,7 +260,22 @@ function updateInvitationsUI() {
     if (!currentUser) return;
     
     // Filter pending invitations where current user is the receiver
-    const pendingReceived = myInvitations.filter(inv => inv.receiverId === currentUser.id && inv.status === 'pending');
+    // AND exclude anyone we're already connected with
+    const pendingReceived = myInvitations.filter(inv => {
+        // Only show pending invitations where I'm the receiver
+        if (inv.receiverId !== currentUser.id || inv.status !== 'pending') {
+            return false;
+        }
+        
+        // Don't show this invitation if we're already connected with this sender
+        const hasAcceptedConnection = myInvitations.some(i => 
+            i.participants.includes(inv.senderId) && 
+            i.participants.includes(currentUser.id) && 
+            i.status === 'accepted'
+        );
+        
+        return !hasAcceptedConnection;
+    });
     
     // Deduplicate: keep only the latest invitation per sender
     const uniqueInvitations = {};
@@ -333,18 +348,28 @@ function renderUsers(filterType) {
         if (!currentUser) {
              actionButtonHTML = `<button class="connect-btn" onclick="signinModal.classList.remove('hidden')">Connect</button>`;
         } else {
-             const invite = myInvitations.find(inv => inv.participants.includes(user.id) && inv.participants.includes(currentUser.id));
+             // Find any invitation (pending or accepted) between these two users
+             const invitations = myInvitations.filter(inv => 
+                 inv.participants.includes(user.id) && inv.participants.includes(currentUser.id)
+             );
              
-             if (!invite) {
-                 actionButtonHTML = `<button class="connect-btn" onclick="sendInvitation('${user.id}', '${user.username}', '${user.avatar || ''}')">Connect</button>`;
-             } else if (invite.status === 'pending') {
-                 if (invite.senderId === currentUser.id) {
+             // Check if there's an accepted invitation (connection established)
+             const acceptedInv = invitations.find(inv => inv.status === 'accepted');
+             if (acceptedInv) {
+                 actionButtonHTML = `<button class="connect-btn" style="background:var(--primary-gradient); color:white; border-color:transparent;" onclick="startSession('${user.username}', '${user.skill || 'Topic'}')">Message</button>`;
+             } else {
+                 // Check if there's a pending invitation
+                 const pendingInv = invitations.find(inv => inv.status === 'pending');
+                 if (!pendingInv) {
+                     // No invitation at all
+                     actionButtonHTML = `<button class="connect-btn" onclick="sendInvitation('${user.id}', '${user.username}', '${user.avatar || ''}')">Connect</button>`;
+                 } else if (pendingInv.senderId === currentUser.id) {
+                     // I sent the invitation
                      actionButtonHTML = `<button class="connect-btn" style="background:var(--secondary-color); color:var(--text-color); cursor:not-allowed;" disabled>Pending...</button>`;
                  } else {
+                     // They sent the invitation to me
                      actionButtonHTML = `<button class="connect-btn" style="background:#10b981; color:white; border-color:transparent;" onclick="invitationsModal.classList.remove('hidden')">Respond</button>`;
                  }
-             } else if (invite.status === 'accepted') {
-                 actionButtonHTML = `<button class="connect-btn" style="background:var(--primary-gradient); color:white; border-color:transparent;" onclick="startSession('${user.username}', '${user.skill || 'Topic'}')">Message</button>`;
              }
         }
 
@@ -393,18 +418,28 @@ function renderConnectUsers(filterType) {
         if (!currentUser) {
              actionButtonHTML = `<button class="connect-btn" onclick="signinModal.classList.remove('hidden')">Connect</button>`;
         } else {
-             const invite = myInvitations.find(inv => inv.participants.includes(user.id) && inv.participants.includes(currentUser.id));
+             // Find any invitation (pending or accepted) between these two users
+             const invitations = myInvitations.filter(inv => 
+                 inv.participants.includes(user.id) && inv.participants.includes(currentUser.id)
+             );
              
-             if (!invite) {
-                 actionButtonHTML = `<button class="connect-btn" onclick="sendInvitation('${user.id}', '${user.username}', '${user.avatar || ''}')">Connect</button>`;
-             } else if (invite.status === 'pending') {
-                 if (invite.senderId === currentUser.id) {
+             // Check if there's an accepted invitation (connection established)
+             const acceptedInv = invitations.find(inv => inv.status === 'accepted');
+             if (acceptedInv) {
+                 actionButtonHTML = `<button class="connect-btn" style="background:var(--primary-gradient); color:white; border-color:transparent;" onclick="startSession('${user.username}', '${user.skill || 'Topic'}')">Message</button>`;
+             } else {
+                 // Check if there's a pending invitation
+                 const pendingInv = invitations.find(inv => inv.status === 'pending');
+                 if (!pendingInv) {
+                     // No invitation at all
+                     actionButtonHTML = `<button class="connect-btn" onclick="sendInvitation('${user.id}', '${user.username}', '${user.avatar || ''}')">Connect</button>`;
+                 } else if (pendingInv.senderId === currentUser.id) {
+                     // I sent the invitation
                      actionButtonHTML = `<button class="connect-btn" style="background:var(--secondary-color); color:var(--text-color); cursor:not-allowed;" disabled>Pending...</button>`;
                  } else {
+                     // They sent the invitation to me
                      actionButtonHTML = `<button class="connect-btn" style="background:#10b981; color:white; border-color:transparent;" onclick="invitationsModal.classList.remove('hidden')">Respond</button>`;
                  }
-             } else if (invite.status === 'accepted') {
-                 actionButtonHTML = `<button class="connect-btn" style="background:var(--primary-gradient); color:white; border-color:transparent;" onclick="startSession('${user.username}', '${user.skill || 'Topic'}')">Message</button>`;
              }
         }
 
@@ -462,11 +497,23 @@ window.openProfileModal = function (userId, event) {
             }
         }
 
+        // Check if already connected
         const msgBtn = document.getElementById('modal-msg-btn');
-        msgBtn.onclick = () => {
-            profileModal.classList.add('hidden');
-            startSession(user.username, user.skill || 'Topic');
-        };
+        const isConnected = myInvitations.some(inv => 
+            inv.participants.includes(userId) && 
+            inv.participants.includes(currentUser?.id) && 
+            inv.status === 'accepted'
+        );
+        
+        if (isConnected) {
+            msgBtn.classList.remove('hidden');
+            msgBtn.onclick = () => {
+                profileModal.classList.add('hidden');
+                startSession(user.username, user.skill || 'Topic');
+            };
+        } else {
+            msgBtn.classList.add('hidden');
+        }
 
         profileModal.classList.remove('hidden');
     }
