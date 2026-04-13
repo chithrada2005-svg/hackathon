@@ -259,22 +259,34 @@ function listenToInvitations(uid) {
 function updateInvitationsUI() {
     if (!currentUser) return;
     
+    // Filter pending invitations where current user is the receiver
     const pendingReceived = myInvitations.filter(inv => inv.receiverId === currentUser.id && inv.status === 'pending');
     
-    if (pendingReceived.length > 0) {
-        invitationBadge.textContent = pendingReceived.length;
+    // Deduplicate: keep only the latest invitation per sender
+    const uniqueInvitations = {};
+    pendingReceived.forEach(inv => {
+        if (!uniqueInvitations[inv.senderId] || 
+            inv.timestamp > uniqueInvitations[inv.senderId].timestamp) {
+            uniqueInvitations[inv.senderId] = inv;
+        }
+    });
+    
+    const deduplicatedInvites = Object.values(uniqueInvitations);
+    
+    if (deduplicatedInvites.length > 0) {
+        invitationBadge.textContent = deduplicatedInvites.length;
         invitationBadge.classList.remove('hidden');
     } else {
         invitationBadge.classList.add('hidden');
     }
     
-    if (pendingReceived.length === 0) {
+    if (deduplicatedInvites.length === 0) {
         invitationsList.innerHTML = '<p style="text-align: center; color: var(--system-text); font-size: 0.95rem;">No pending invitations.</p>';
         return;
     }
     
     invitationsList.innerHTML = '';
-    pendingReceived.forEach(inv => {
+    deduplicatedInvites.forEach(inv => {
         const card = document.createElement('div');
         card.className = 'invitation-card';
         card.innerHTML = `
@@ -384,7 +396,7 @@ function renderConnectUsers(filterType) {
              const invite = myInvitations.find(inv => inv.participants.includes(user.id) && inv.participants.includes(currentUser.id));
              
              if (!invite) {
-                 actionButtonHTML = `<button class="connect-btn" onclick="sendInvitation('${user.id}', '${user.username}', '${user.avatar || ''}')\">Connect</button>`;
+                 actionButtonHTML = `<button class="connect-btn" onclick="sendInvitation('${user.id}', '${user.username}', '${user.avatar || ''}')">Connect</button>`;
              } else if (invite.status === 'pending') {
                  if (invite.senderId === currentUser.id) {
                      actionButtonHTML = `<button class="connect-btn" style="background:var(--secondary-color); color:var(--text-color); cursor:not-allowed;" disabled>Pending...</button>`;
@@ -536,6 +548,8 @@ function setupConnectFilterListeners() {
             renderConnectUsers(e.target.dataset.filter);
         });
     });
+    // Render initial users
+    renderConnectUsers('all');
 }
 
 // Call this when the page loads
@@ -545,7 +559,18 @@ setTimeout(setupConnectFilterListeners, 500);
 window.sendInvitation = async function(receiverId, receiverName, receiverAvatar) {
     if (!currentUser) return;
     try {
-        await addDoc(collection(db, "invitations"), {
+        // Check if an invitation already exists between these two users
+        const existingInvite = myInvitations.find(inv => 
+            inv.participants.includes(currentUser.id) && 
+            inv.participants.includes(receiverId)
+        );
+        
+        if (existingInvite) {
+            alert("You already have a pending invitation with this user!");
+            return;
+        }
+        
+        const invitationRef = await addDoc(collection(db, "invitations"), {
             participants: [currentUser.id, receiverId],
             senderId: currentUser.id,
             senderName: currentUser.username,
@@ -557,7 +582,29 @@ window.sendInvitation = async function(receiverId, receiverName, receiverAvatar)
             status: 'pending',
             timestamp: serverTimestamp()
         });
+        
+        // Add to local myInvitations array immediately for instant UI update
+        myInvitations.push({
+            id: invitationRef.id,
+            participants: [currentUser.id, receiverId],
+            senderId: currentUser.id,
+            senderName: currentUser.username,
+            senderAvatar: currentUser.avatar,
+            senderSkill: currentUser.skill || 'Learner',
+            receiverId: receiverId,
+            receiverName: receiverName,
+            receiverAvatar: receiverAvatar,
+            status: 'pending',
+            timestamp: new Date()
+        });
+        
+        // Update UI immediately without waiting for Firebase
+        const activeFilter = document.querySelector('.filter-btn.active')?.dataset.filter || 'all';
+        renderUsers(activeFilter);
+        renderConnectUsers(activeFilter);
+        
         console.log("Invitation sent successfully!");
+        alert("Invitation sent! Waiting for response...");
     } catch(err) {
         console.error("Error sending invitation:", err);
         alert("Error sending invitation. Please try again.");
@@ -567,6 +614,19 @@ window.sendInvitation = async function(receiverId, receiverName, receiverAvatar)
 window.acceptInvitation = async function(inviteId, senderName, senderSkill) {
     try {
         await setDoc(doc(db, "invitations", inviteId), { status: 'accepted' }, { merge: true });
+        
+        // Update local array
+        const invitation = myInvitations.find(inv => inv.id === inviteId);
+        if (invitation) {
+            invitation.status = 'accepted';
+        }
+        
+        // Refresh UI
+        const activeFilter = document.querySelector('.filter-btn.active')?.dataset.filter || 'all';
+        renderUsers(activeFilter);
+        renderConnectUsers(activeFilter);
+        updateInvitationsUI();
+        
         invitationsModal.classList.add('hidden');
         startSession(senderName, senderSkill || 'Topic');
     } catch(err) {
@@ -578,6 +638,16 @@ window.acceptInvitation = async function(inviteId, senderName, senderSkill) {
 window.declineInvitation = async function(inviteId) {
     try {
         await deleteDoc(doc(db, "invitations", inviteId));
+        
+        // Remove from local array
+        myInvitations = myInvitations.filter(inv => inv.id !== inviteId);
+        
+        // Refresh UI
+        updateInvitationsUI();
+        const activeFilter = document.querySelector('.filter-btn.active')?.dataset.filter || 'all';
+        renderUsers(activeFilter);
+        renderConnectUsers(activeFilter);
+        
         console.log("Invitation declined successfully!");
     } catch(err) {
         console.error("Error declining invitation:", err);
