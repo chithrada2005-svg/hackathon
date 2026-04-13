@@ -2,7 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, orderBy, serverTimestamp, addDoc, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getDatabase, ref, onValue, set, onDisconnect } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
-import { Analytics } from "@vercel/analytics/next"
 
 // --- 1. Firebase Configuration ---
 // ⚠️ REPLACE THIS CONFIGURATION WITH YOUR OWN FIREBASE PROJECT SETTINGS ⚠️
@@ -24,6 +23,7 @@ const rtdb = getDatabase(app);
 // --- 2. DOM Elements Selection ---
 const dashboardView = document.getElementById('dashboard-view');
 const chatView = document.getElementById('chat-view');
+const connectView = document.getElementById('connect-view');
 const usersGrid = document.getElementById('users-grid');
 const filterBtns = document.querySelectorAll('.filter-btn');
 
@@ -35,19 +35,28 @@ const typingIndicator = document.getElementById('typing-indicator');
 const chatForm = document.getElementById('chat-form');
 const messageInput = document.getElementById('message-input');
 
+// Verify critical elements exist
+console.log("🔍 DOM Element Check:");
+console.log("chatMessages:", chatMessages ? "✓" : "✗");
+console.log("chatForm:", chatForm ? "✓" : "✗");
+console.log("messageInput:", messageInput ? "✓" : "✗");
+
 // Modal Elements
 const navAbout = document.getElementById('nav-about');
 const navHowItWorks = document.getElementById('nav-howitworks');
 const navSignin = document.getElementById('nav-signin');
 const navSignup = document.getElementById('nav-signup');
+const navConnect = document.getElementById('nav-connect');
 const aboutModal = document.getElementById('about-modal');
 const howItWorksModal = document.getElementById('howitworks-modal');
 const signinModal = document.getElementById('signin-modal');
 const signupModal = document.getElementById('signup-modal');
+const connectModal = document.getElementById('connect-modal');
 const closeAbout = document.getElementById('close-about');
 const closeHowItWorks = document.getElementById('close-howitworks');
 const closeSignin = document.getElementById('close-signin');
 const closeSignup = document.getElementById('close-signup');
+const closeConnect = document.getElementById('close-connect');
 const heroGetStarted = document.getElementById('hero-get-started');
 const mobileMenuBtn = document.getElementById('mobile-menu-btn');
 const navLinks = document.getElementById('nav-links');
@@ -83,34 +92,47 @@ let unsubscribeInvitations = null;
 
 // --- 4. Initialization ---
 function init() {
+    console.log("🚀 Initializing PeerLix App...");
+    console.log("Firebase Auth initialized:", auth ? "✓" : "✗");
+    console.log("Firestore initialized:", db ? "✓" : "✗");
+    
     loadThemePreferences();
 
     // Listen for Authentication state changes
     onAuthStateChanged(auth, async (user) => {
+        console.log("Auth state changed. User:", user ? user.email : "null");
         if (user) {
             // User is signed in
-            const docSnap = await getDoc(doc(db, "users", user.uid));
-            if (docSnap.exists()) {
-                currentUser = { id: user.uid, ...docSnap.data() };
-            } else {
-                // Rescue incomplete signups (if their DB write failed previously)
-                currentUser = { 
-                    id: user.uid, 
-                    username: user.email.split('@')[0],
-                    email: user.email,
-                    skill: 'Learner',
-                    avatar: 'https://static.vecteezy.com/system/resources/previews/021/548/095/non_2x/default-profile-picture-avatar-user-avatar-icon-person-icon-head-icon-profile-picture-icons-default-anonymous-user-male-and-female-businessman-photo-placeholder-social-network-avatar-portrait-free-vector.jpg',
-                    status: 'online'
-                };
-                try {
-                    await setDoc(doc(db, "users", user.uid), currentUser);
-                } catch(e) { console.error("Could not rescue user profile:", e); }
+            console.log("User signed in:", user.uid);
+            try {
+                const docSnap = await getDoc(doc(db, "users", user.uid));
+                if (docSnap.exists()) {
+                    currentUser = { id: user.uid, ...docSnap.data() };
+                    console.log("User profile loaded from Firestore");
+                } else {
+                    // Rescue incomplete signups (if their DB write failed previously)
+                    currentUser = { 
+                        id: user.uid, 
+                        username: user.email.split('@')[0],
+                        email: user.email,
+                        skill: 'Learner',
+                        avatar: 'https://static.vecteezy.com/system/resources/previews/021/548/095/non_2x/default-profile-picture-avatar-user-avatar-icon-person-icon-head-icon-profile-picture-icons-default-anonymous-user-male-and-female-businessman-photo-placeholder-social-network-avatar-portrait-free-vector.jpg',
+                        status: 'online'
+                    };
+                    try {
+                        await setDoc(doc(db, "users", user.uid), currentUser);
+                        console.log("User profile created in Firestore");
+                    } catch(e) { console.error("Could not rescue user profile:", e); }
+                }
+                setupUIForUser();
+                connectPresence(user.uid);
+                listenToInvitations(user.uid);
+            } catch(err) {
+                console.error("Error in onAuthStateChanged:", err);
             }
-            setupUIForUser();
-            connectPresence(user.uid);
-            listenToInvitations(user.uid);
         } else {
             // User is signed out
+            console.log("User signed out");
             currentUser = null;
             if(unsubscribeInvitations) unsubscribeInvitations();
             setupUIForGuest();
@@ -136,6 +158,22 @@ function connectPresence(uid) {
             });
         }
     });
+
+    // Listen to RTDB status changes and sync to Firestore for real-time updates
+    onValue(userStatusDatabaseRef, async (snap) => {
+        if (snap.exists()) {
+            const rtdbStatus = snap.val().state;
+            // Only update if not in a live session (preserve 'live' status)
+            try {
+                const docSnap = await getDoc(doc(db, 'users', uid));
+                if (docSnap.exists() && docSnap.data().status !== 'live') {
+                    await setDoc(doc(db, 'users', uid), { status: rtdbStatus }, { merge: true });
+                }
+            } catch (err) {
+                console.error("Error syncing RTDB status to Firestore:", err);
+            }
+        }
+    });
 }
 
 function listenToUsers(filterType) {
@@ -150,7 +188,9 @@ function listenToUsers(filterType) {
         renderUsers(filterType);
     }, (error) => {
         console.error("Error fetching real-time users: ", error);
-        usersGrid.innerHTML = '<p style="text-align:center; color:red;">Failed to connect to Firebase. Did you add your config?</p>';
+        if (usersGrid) {
+            usersGrid.innerHTML = '<p style="text-align:center; color:red;">Failed to connect to Firebase. Did you add your config?</p>';
+        }
     });
 }
 
@@ -242,11 +282,11 @@ function updateInvitationsUI() {
                 <img src="${inv.senderAvatar}" alt="${inv.senderName}" class="invitation-avatar">
                 <div>
                     <h4 style="margin-bottom: 0.2rem;">${inv.senderName}</h4>
-                    <p style="font-size: 0.85rem; color: var(--system-text);">wants to connect</p>
+                    <p style="font-size: 0.85rem; color: var(--system-text);">${inv.senderSkill || 'Learner'} • wants to connect</p>
                 </div>
             </div>
             <div class="invitation-actions">
-                <button class="btn-primary btn-sm" onclick="acceptInvitation('${inv.id}', '${inv.senderName}')">Accept</button>
+                <button class="btn-primary btn-sm" onclick="acceptInvitation('${inv.id}', '${inv.senderName}', '${inv.senderSkill || 'Topic'}')">Accept</button>
                 <button class="btn-sm btn-decline" onclick="declineInvitation('${inv.id}')">Decline</button>
             </div>
         `;
@@ -255,6 +295,8 @@ function updateInvitationsUI() {
 }
 
 function renderUsers(filterType) {
+    if (!usersGrid) return; // usersGrid removed from main page
+    
     usersGrid.innerHTML = '';
 
     let filteredUsers = liveUsers;
@@ -301,13 +343,73 @@ function renderUsers(filterType) {
             <p class="user-skill">${user.skill || 'Learner'}</p>
             
             <div class="card-actions">
-                ${actionButtonHTML}
+                ${currentUser ? actionButtonHTML : ''}
                 <button class="icon-btn info-btn" onclick="openProfileModal('${user.id}', event)" aria-label="View Profile">
                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </button>
             </div>
         `;
         usersGrid.appendChild(card);
+    });
+}
+
+function renderConnectUsers(filterType) {
+    const connectUsersGrid = document.getElementById('connect-users-grid');
+    if (!connectUsersGrid) return;
+    
+    connectUsersGrid.innerHTML = '';
+
+    let filteredUsers = liveUsers;
+    if (currentUser) {
+        filteredUsers = liveUsers.filter(u => u.id !== currentUser.id);
+    }
+
+    if (filterType !== 'all') {
+        filteredUsers = filteredUsers.filter(user => user.status === filterType);
+    }
+
+    filteredUsers.forEach(user => {
+        const card = document.createElement('div');
+        card.className = 'user-card';
+
+        let statusBadge = '';
+        if (user.status === 'online') statusBadge = '<span class="status-badge status-online">Online</span>';
+        if (user.status === 'live') statusBadge = '<span class="status-badge status-live">Live</span>';
+        if (user.status === 'offline') statusBadge = '<span class="status-badge status-offline">Offline</span>';
+
+        let actionButtonHTML = '';
+        if (!currentUser) {
+             actionButtonHTML = `<button class="connect-btn" onclick="signinModal.classList.remove('hidden')">Connect</button>`;
+        } else {
+             const invite = myInvitations.find(inv => inv.participants.includes(user.id) && inv.participants.includes(currentUser.id));
+             
+             if (!invite) {
+                 actionButtonHTML = `<button class="connect-btn" onclick="sendInvitation('${user.id}', '${user.username}', '${user.avatar || ''}')\">Connect</button>`;
+             } else if (invite.status === 'pending') {
+                 if (invite.senderId === currentUser.id) {
+                     actionButtonHTML = `<button class="connect-btn" style="background:var(--secondary-color); color:var(--text-color); cursor:not-allowed;" disabled>Pending...</button>`;
+                 } else {
+                     actionButtonHTML = `<button class="connect-btn" style="background:#10b981; color:white; border-color:transparent;" onclick="invitationsModal.classList.remove('hidden')">Respond</button>`;
+                 }
+             } else if (invite.status === 'accepted') {
+                 actionButtonHTML = `<button class="connect-btn" style="background:var(--primary-gradient); color:white; border-color:transparent;" onclick="startSession('${user.username}', '${user.skill || 'Topic'}')">Message</button>`;
+             }
+        }
+
+        card.innerHTML = `
+            ${statusBadge}
+            <img src="${user.avatar || 'https://static.vecteezy.com/system/resources/previews/021/548/095/non_2x/default-profile-picture-avatar-user-avatar-icon-person-icon-head-icon-profile-picture-icons-default-anonymous-user-male-and-female-businessman-photo-placeholder-social-network-avatar-portrait-free-vector.jpg'}" alt="${user.username}" class="user-avatar">
+            <h3 class="user-name">${user.username}</h3>
+            <p class="user-skill">${user.skill || 'Learner'}</p>
+            
+            <div class="card-actions">
+                ${currentUser ? actionButtonHTML : ''}
+                <button class="icon-btn info-btn" onclick="openProfileModal('${user.id}', event)" aria-label="View Profile">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </button>
+            </div>
+        `;
+        connectUsersGrid.appendChild(card);
     });
 }
 
@@ -367,16 +469,13 @@ function setupUIForUser() {
         navSignup.textContent = "Sign Out";
         navSignup.style.display = 'block';
     }
+    if (navConnect) {
+        navConnect.classList.remove('hidden');
+    }
     if (navInvitations) navInvitations.classList.remove('hidden');
     if (navProfileBtn) {
         navProfileBtn.src = currentUser.avatar || 'https://static.vecteezy.com/system/resources/previews/021/548/095/non_2x/default-profile-picture-avatar-user-avatar-icon-person-icon-head-icon-profile-picture-icons-default-anonymous-user-male-and-female-businessman-photo-placeholder-social-network-avatar-portrait-free-vector.jpg';
         navProfileBtn.classList.remove('hidden');
-    }
-
-    const networkSection = document.getElementById('network-section');
-    if (networkSection) {
-        networkSection.classList.remove('hidden');
-        networkSection.scrollIntoView({ behavior: 'smooth' });
     }
 }
 
@@ -389,11 +488,11 @@ function setupUIForGuest() {
         navSignup.textContent = 'Sign Up';
         navSignup.style.display = 'block';
     }
+    if (navConnect) {
+        navConnect.classList.add('hidden');
+    }
     if (navInvitations) navInvitations.classList.add('hidden');
     if (navProfileBtn) navProfileBtn.classList.add('hidden');
-
-    const networkSection = document.getElementById('network-section');
-    if (networkSection) networkSection.classList.add('hidden');
 }
 
 // Theming
@@ -427,6 +526,21 @@ filterBtns.forEach(btn => {
     });
 });
 
+// Connect View Filter Buttons
+function setupConnectFilterListeners() {
+    const connectFilterBtns = document.querySelectorAll('#connect-view .filter-btn');
+    connectFilterBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            connectFilterBtns.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            renderConnectUsers(e.target.dataset.filter);
+        });
+    });
+}
+
+// Call this when the page loads
+setTimeout(setupConnectFilterListeners, 500);
+
 // Invitations Action Logic
 window.sendInvitation = async function(receiverId, receiverName, receiverAvatar) {
     if (!currentUser) return;
@@ -436,34 +550,44 @@ window.sendInvitation = async function(receiverId, receiverName, receiverAvatar)
             senderId: currentUser.id,
             senderName: currentUser.username,
             senderAvatar: currentUser.avatar || 'https://static.vecteezy.com/system/resources/previews/021/548/095/non_2x/default-profile-picture-avatar-user-avatar-icon-person-icon-head-icon-profile-picture-icons-default-anonymous-user-male-and-female-businessman-photo-placeholder-social-network-avatar-portrait-free-vector.jpg',
+            senderSkill: currentUser.skill || 'Learner',
             receiverId: receiverId,
+            receiverName: receiverName,
+            receiverAvatar: receiverAvatar,
             status: 'pending',
             timestamp: serverTimestamp()
         });
+        console.log("Invitation sent successfully!");
     } catch(err) {
         console.error("Error sending invitation:", err);
+        alert("Error sending invitation. Please try again.");
     }
 }
 
-window.acceptInvitation = async function(inviteId, senderName) {
+window.acceptInvitation = async function(inviteId, senderName, senderSkill) {
     try {
         await setDoc(doc(db, "invitations", inviteId), { status: 'accepted' }, { merge: true });
         invitationsModal.classList.add('hidden');
-        startSession(senderName, 'Topic');
+        startSession(senderName, senderSkill || 'Topic');
     } catch(err) {
         console.error("Error accepting invitation:", err);
+        alert("Error accepting invitation. Please try again.");
     }
 }
 
 window.declineInvitation = async function(inviteId) {
     try {
         await deleteDoc(doc(db, "invitations", inviteId));
+        console.log("Invitation declined successfully!");
     } catch(err) {
         console.error("Error declining invitation:", err);
+        alert("Error declining invitation. Please try again.");
     }
 }
 
 // Chat Sessions
+let shownMessageTimestamps = new Set();
+
 window.startSession = async function (peerName, skillContext) {
     if (!currentUser) {
         alert("Please log in first to chat!");
@@ -471,9 +595,32 @@ window.startSession = async function (peerName, skillContext) {
         return;
     }
 
+    // Find peer user info
+    const peerUser = liveUsers.find(u => u.username === peerName);
+
     currentRoom = [currentUser.username, peerName].sort().join('-');
-    currentRoomName.textContent = `Session with ${peerName}`;
+    
+    // Update header with peer information
+    currentRoomName.textContent = peerName;
+    document.getElementById('peer-avatar').src = peerUser?.avatar || 'https://static.vecteezy.com/system/resources/previews/021/548/095/non_2x/default-profile-picture-avatar-user-avatar-icon-person-icon-head-icon-profile-picture-icons-default-anonymous-user-male-and-female-businessman-photo-placeholder-social-network-avatar-portrait-free-vector.jpg';
+    document.getElementById('peer-skill').textContent = peerUser?.skill || skillContext;
+    
+    // Set status indicator
+    const statusIndicator = document.getElementById('peer-status-indicator');
+    const statusText = document.getElementById('peer-status-text');
+    if (peerUser?.status === 'live') {
+        statusIndicator.className = 'status-indicator live';
+        statusText.textContent = 'In Live Session';
+    } else if (peerUser?.status === 'online') {
+        statusIndicator.className = 'status-indicator online';
+        statusText.textContent = 'Online';
+    } else {
+        statusIndicator.className = 'status-indicator';
+        statusText.textContent = 'Offline';
+    }
+    
     chatMessages.innerHTML = '';
+    shownMessageTimestamps.clear();
 
     // Update our status in Firebase to "live"
     await setDoc(doc(db, 'users', currentUser.id), { status: 'live' }, { merge: true });
@@ -493,14 +640,25 @@ window.startSession = async function (peerName, skillContext) {
     const q = query(messagesRef, orderBy("timestamp", "asc"));
 
     unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        console.log("📨 Received snapshot with", snapshot.size, "messages");
         snapshot.docChanges().forEach((change) => {
             if (change.type === "added") {
                 const data = change.doc.data();
-                if (data.sender !== currentUser.username) {
-                    addChatMessage(data.sender, data.text, false, data.time);
+                const messageKey = `${data.sender}-${data.timestamp?.seconds || ''}`;
+                
+                console.log("Message from Firestore:", data.sender, "- Already shown:", shownMessageTimestamps.has(messageKey));
+                
+                // Avoid showing duplicate messages
+                if (!shownMessageTimestamps.has(messageKey)) {
+                    shownMessageTimestamps.add(messageKey);
+                    const isMine = data.sender === currentUser.username;
+                    addChatMessage(data.sender, data.text, isMine, data.time);
+                    console.log("✅ Message displayed:", data.sender, data.text.substring(0, 30));
                 }
             }
         });
+    }, (error) => {
+        console.error("❌ Error listening to messages:", error);
     });
 }
 
@@ -522,6 +680,28 @@ window.leaveRoom = async function () {
     }, 300);
 }
 
+function switchToConnectView() {
+    console.log("Switching to Connect View");
+    renderConnectUsers('all');
+    
+    dashboardView.classList.remove('active');
+    setTimeout(() => {
+        dashboardView.classList.add('hidden');
+        connectView.classList.remove('hidden');
+        connectView.classList.add('active');
+    }, 300);
+}
+
+function switchBackToDashboard() {
+    console.log("Switching back to Dashboard");
+    connectView.classList.remove('active');
+    setTimeout(() => {
+        connectView.classList.add('hidden');
+        dashboardView.classList.remove('hidden');
+        dashboardView.classList.add('active');
+    }, 300);
+}
+
 function getFormattedTime() {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -535,6 +715,13 @@ function addSystemMessage(text) {
 }
 
 function addChatMessage(sender, text, isMine, timeSent = null) {
+    console.log("Adding message:", { sender, text, isMine, chatMessagesExists: !!chatMessages });
+    
+    if (!chatMessages) {
+        console.error("❌ chatMessages element not found!");
+        return;
+    }
+    
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${isMine ? 'mine' : 'other'}`;
     const time = timeSent || getFormattedTime();
@@ -546,19 +733,50 @@ function addChatMessage(sender, text, isMine, timeSent = null) {
         </div>
     `;
     chatMessages.appendChild(msgDiv);
-    scrollToBottom();
+    console.log("✅ Message added to DOM");
+    
+    // Ensure message is visible
+    setTimeout(() => {
+        msgDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        scrollToBottom();
+    }, 0);
 }
 
 function scrollToBottom() {
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        console.log("📍 Scrolled to bottom");
+    }
 }
 
 function handleSendMessage(e) {
     e.preventDefault();
+    console.log("📤 Send message triggered");
+    console.log({
+        currentUser: currentUser?.username,
+        currentRoom: currentRoom,
+        messageInputExists: !!messageInput
+    });
+    
     const text = messageInput.value.trim();
-    if (!text || !currentUser || !currentRoom) return;
+    console.log("Message text:", text);
+    
+    if (!text) {
+        console.warn("❌ Message is empty");
+        return;
+    }
+    if (!currentUser) {
+        console.warn("❌ currentUser is null");
+        return;
+    }
+    if (!currentRoom) {
+        console.warn("❌ currentRoom is null");
+        return;
+    }
 
     const time = getFormattedTime();
+    console.log("📝 Sending message from", currentUser.username, "to room", currentRoom);
+    
     // Show my message immediately locally for visual speed
     addChatMessage(currentUser.username, text, true, time);
     messageInput.value = '';
@@ -569,18 +787,64 @@ function handleSendMessage(e) {
         text: text,
         timestamp: serverTimestamp(),
         time: time
+    }).then(() => {
+        console.log("✅ Message saved to Firestore");
+    }).catch(err => {
+        console.error("❌ Error saving message:", err);
+        alert("Failed to send message: " + err.message);
     });
 }
 
 // --- 6. Event Listeners ---
 themeToggle.addEventListener('click', toggleTheme);
 leaveRoomBtn.addEventListener('click', leaveRoom);
-chatForm.addEventListener('submit', handleSendMessage);
+document.getElementById('back-to-dashboard-btn')?.addEventListener('click', switchBackToDashboard);
+
+console.log("Setting up form listener...");
+console.log("chatForm element:", chatForm);
+console.log("messageInput element:", messageInput);
+
+if (chatForm) {
+    chatForm.addEventListener('submit', handleSendMessage);
+    console.log("✅ Chat form submit listener attached");
+} else {
+    console.error("❌ chatForm not found!");
+}
+
+if (messageInput) {
+    console.log("✅ messageInput found");
+} else {
+    console.error("❌ messageInput not found!");
+}
+
+// Chat action buttons
+document.getElementById('video-call-btn')?.addEventListener('click', () => {
+    alert('📹 Video call feature coming soon!');
+});
+
+document.getElementById('voice-call-btn')?.addEventListener('click', () => {
+    alert('☎️ Voice call feature coming soon!');
+});
+
+document.getElementById('share-btn')?.addEventListener('click', () => {
+    alert('🖥️ Screen share feature coming soon!');
+});
+
+document.getElementById('emoji-btn')?.addEventListener('click', () => {
+    const emojiList = '😊😂🥰😍😎🎉🔥💯✨🌟👍';
+    messageInput.value += emojiList.charAt(Math.floor(Math.random() * emojiList.length));
+    messageInput.focus();
+});
+
+document.getElementById('attachment-btn')?.addEventListener('click', () => {
+    alert('📎 File attachment feature coming soon!');
+});
+
 window.addEventListener('DOMContentLoaded', init);
 
 heroGetStarted?.addEventListener('click', () => {
     if (currentUser) {
-        document.querySelector('#network-section').scrollIntoView({ behavior: 'smooth' });
+        switchToConnectView();
     } else {
         signinModal.classList.remove('hidden');
     }
@@ -624,6 +888,10 @@ closeSignin?.addEventListener('click', () => signinModal.classList.add('hidden')
 closeSignup?.addEventListener('click', () => signupModal.classList.add('hidden'));
 closeInvitations?.addEventListener('click', () => invitationsModal.classList.add('hidden'));
 navInvitations?.addEventListener('click', (e) => { e.preventDefault(); invitationsModal.classList.remove('hidden'); });
+navConnect?.addEventListener('click', (e) => { 
+    e.preventDefault();
+    switchToConnectView();
+});
 closeEditor?.addEventListener('click', () => editorModal.classList.add('hidden'));
 cancelEditor?.addEventListener('click', () => editorModal.classList.add('hidden'));
 
@@ -667,26 +935,51 @@ document.getElementById('signin-form')?.addEventListener('submit', async (e) => 
     const passwordInput = document.getElementById('password');
     const signinError = document.getElementById('signin-error');
 
+    // Validation
+    if (!emailInput || !passwordInput) {
+        console.error("Form inputs not found!");
+        alert("Error: Form fields not found. Please refresh the page.");
+        return;
+    }
+
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!email || !password) {
+        if (signinError) {
+            signinError.textContent = 'Please enter email and password';
+            signinError.classList.remove('hidden');
+        }
+        return;
+    }
+
     try {
-        signinError.classList.add('hidden');
-        await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+        if (signinError) signinError.classList.add('hidden');
+        console.log("Attempting to sign in with:", email);
+        await signInWithEmailAndPassword(auth, email, password);
+        console.log("Sign in successful!");
         signinModal.classList.add('hidden');
         emailInput.value = '';
         passwordInput.value = '';
     } catch (err) {
-        console.error(err);
+        console.error("Login error:", err.code, err.message);
         // Check if it's a password-related error
         if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-            signinError.textContent = 'Please Enter the Correct Password';
-            signinError.classList.remove('hidden');
+            if (signinError) {
+                signinError.textContent = 'Please Enter the Correct Password';
+                signinError.classList.remove('hidden');
+            }
         } else if (err.code === 'auth/user-not-found') {
-            signinError.textContent = 'User not found. Please check your email.';
-            signinError.classList.remove('hidden');
+            if (signinError) {
+                signinError.textContent = 'User not found. Please check your email.';
+                signinError.classList.remove('hidden');
+            }
         } else {
-            signinError.textContent = err.message || 'Login failed';
-            signinError.classList.remove('hidden');
+            if (signinError) {
+                signinError.textContent = err.message || 'Login failed';
+                signinError.classList.remove('hidden');
+            }
         }
-        console.error(err);
     }
 });
 
